@@ -3,6 +3,10 @@
 三态控制:开始(或暂停后"继续演奏") / 停止(= 暂停,进度保留) / 重置(仅停止后可用,进度归零)。
 """
 
+import os
+import sys
+import tempfile
+
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -21,6 +25,7 @@ from core import ir as ir_mod
 from core.compiler import compile_score
 from core.profile import resolve_profile
 from core.scenario import SCENARIOS, get_scenario
+from core.score_preview import synthesize_preview
 from core.window_monitor import FocusLockPolicy, ForegroundWatcher
 from gui.theme import BRAND, INK_2, INK_3, STATE_INFO
 from gui.widgets import AppDialog
@@ -95,6 +100,7 @@ class PlayerTab(QWidget):
         self._had_error = False
         self._paused_done = 0
         self._paused_total = 0
+        self._preview_path = None
         # 焦点检测:丢失目标窗口焦点时自动暂停,恢复后由用户选择续播或从头
         focus_cfg = player_cfg.get("focus_check") or {}
         self._focus_enabled = bool(focus_cfg.get("enabled", True))
@@ -105,6 +111,9 @@ class PlayerTab(QWidget):
         self._mini_mode = False
         self._focus_lost = False
         self._build_ui()
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.timeout.connect(self._on_preview_finished)
         self._focus_timer = QTimer(self)
         self._focus_timer.setInterval(self._poll_interval_ms)
         self._focus_timer.timeout.connect(self._check_focus)
@@ -195,6 +204,7 @@ class PlayerTab(QWidget):
         self.bpm_slider.setValue(100)
         self.bpm_spin.valueChanged.connect(self.bpm_slider.setValue)
         self.bpm_slider.valueChanged.connect(self.bpm_spin.setValue)
+        self.bpm_slider.valueChanged.connect(self._on_bpm_changed)
         bpm_row.addWidget(self.bpm_spin)
         bpm_row.addWidget(self.bpm_slider, 1)
         unit = QLabel("拍/分钟")
@@ -266,6 +276,29 @@ class PlayerTab(QWidget):
             f"background: #1E1E28; border-radius: 8px; border: 1px solid #26262F;"
         )
         lay.addWidget(hint)
+
+        preview_head = QHBoxLayout()
+        preview_title = QLabel("当前乐谱试听")
+        preview_title.setObjectName("SectionTitle")
+        preview_head.addWidget(preview_title)
+        preview_head.addStretch(1)
+        self.preview_status = QLabel("选择乐谱后可试听")
+        self.preview_status.setObjectName("HintText")
+        preview_head.addWidget(self.preview_status)
+        lay.addLayout(preview_head)
+        preview_row = QHBoxLayout()
+        self.preview_btn = QPushButton("▶ 试听当前乐谱")
+        self.preview_btn.setObjectName("BtnSecondary")
+        self.preview_btn.setEnabled(False)
+        self.preview_btn.clicked.connect(self._preview_score)
+        self.preview_stop_btn = QPushButton("■ 停止试听")
+        self.preview_stop_btn.setObjectName("BtnStop")
+        self.preview_stop_btn.setEnabled(False)
+        self.preview_stop_btn.clicked.connect(self.stop_preview)
+        preview_row.addWidget(self.preview_btn)
+        preview_row.addWidget(self.preview_stop_btn)
+        preview_row.addStretch(1)
+        lay.addLayout(preview_row)
         root.addWidget(card)
         root.addStretch(1)
 
@@ -282,6 +315,7 @@ class PlayerTab(QWidget):
         return value
 
     def refresh(self):
+        self.stop_preview()
         self._clear_pause()
         self.combo.blockSignals(True)
         self.combo.clear()
@@ -297,6 +331,7 @@ class PlayerTab(QWidget):
             self.info_count.setText("-")
             self.info_duration.setText("-")
             self.play_btn.setEnabled(False)
+            self.preview_btn.setEnabled(False)
 
     def select_score(self, score_id: int):
         for i in range(self.combo.count()):
@@ -305,10 +340,12 @@ class PlayerTab(QWidget):
                 return
 
     def _on_select(self):
+        self.stop_preview()
         self._score_id = self.combo.currentData()
         self._clear_pause()
         if self._score_id is None:
             self.play_btn.setEnabled(False)
+            self.preview_btn.setEnabled(False)
             return
         score = self._db.get_score(self._score_id)
         if score is None:
@@ -318,6 +355,67 @@ class PlayerTab(QWidget):
         self.info_count.setText(str(len(score["notes"])))
         self.info_duration.setText(f"{self._estimate_seconds(score['notes'], self.bpm_spin.value())} 秒")
         self.play_btn.setEnabled(not self._player.is_playing)
+        self.preview_btn.setEnabled(bool(score["notes"]))
+        self.preview_status.setText(f"《{score['name']}》 · {self.bpm_spin.value()} BPM")
+
+    def _on_bpm_changed(self, _value):
+        self.stop_preview()
+        if self._score_id is None:
+            return
+        score = self._db.get_score(self._score_id)
+        if score is None:
+            return
+        self.info_duration.setText(f"{self._estimate_seconds(score['notes'], self.bpm_spin.value())} 秒")
+        self.preview_status.setText(f"《{score['name']}》 · {self.bpm_spin.value()} BPM")
+
+    def _preview_score(self):
+        score = self._db.get_score(self._score_id) if self._score_id is not None else None
+        if not score or not score["notes"]:
+            AppDialog.show_warning(self, "无法试听", "请先选择包含音符的乐谱")
+            return
+        try:
+            wav_data, duration = synthesize_preview(score["notes"], self.bpm_spin.value())
+            self.stop_preview()
+            fd, path = tempfile.mkstemp(prefix="amp_player_preview_", suffix=".wav")
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(wav_data)
+            self._preview_path = path
+            if sys.platform != "win32":
+                raise RuntimeError("试听播放目前仅支持 Windows")
+            import winsound
+            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            self.preview_stop_btn.setEnabled(True)
+            self.preview_status.setText(f"正在试听《{score['name']}》 · {duration:.1f} 秒")
+            self._preview_timer.start(max(1, round(duration * 1000)))
+        except Exception as exc:
+            self.stop_preview()
+            AppDialog.show_error(self, "试听失败", str(exc))
+
+    def stop_preview(self):
+        timer = getattr(self, "_preview_timer", None)
+        if timer is not None:
+            timer.stop()
+        try:
+            if sys.platform == "win32":
+                import winsound
+                winsound.PlaySound(None, 0)
+        except Exception:
+            pass
+        if hasattr(self, "preview_stop_btn"):
+            self.preview_stop_btn.setEnabled(False)
+        if self._preview_path:
+            try:
+                os.remove(self._preview_path)
+            except OSError:
+                pass
+            self._preview_path = None
+
+    def _on_preview_finished(self):
+        self.stop_preview()
+        if self._score_id is not None:
+            score = self._db.get_score(self._score_id)
+            if score:
+                self.preview_status.setText(f"试听完成 · 《{score['name']}》")
 
     def _clear_pause(self):
         """回到未开始态:清空暂停进度与按钮状态。"""
@@ -333,6 +431,8 @@ class PlayerTab(QWidget):
         return round(total_ms / 1000.0, 1)
 
     def _play(self):
+        self.stop_preview()
+        self.preview_btn.setEnabled(False)
         if self._score_id is None:
             return
         score = self._db.get_score(self._score_id)
@@ -403,6 +503,7 @@ class PlayerTab(QWidget):
         self.play_btn.setText("开始演奏")
         self.stop_btn.setEnabled(False)
         self.reset_btn.setEnabled(False)
+        self.preview_btn.setEnabled(self._score_id is not None)
         self.state_label.setText("已中止")
         self.progress_state.setText(reason or "演奏已中止")
         self.progress_bar.setRange(0, 100)
@@ -431,6 +532,7 @@ class PlayerTab(QWidget):
             timer.stop()
             self.play_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
+            self.preview_btn.setEnabled(self._score_id is not None)
             self.progress_state.setText("已取消")
             return
         self._player.stop()
@@ -552,6 +654,7 @@ class PlayerTab(QWidget):
         self.play_btn.setText("继续演奏" if done > 0 else "开始演奏")
         self.stop_btn.setEnabled(False)
         self.reset_btn.setEnabled(True)
+        self.preview_btn.setEnabled(self._score_id is not None)
         self.state_label.setText("已暂停")
         self.progress_state.setText(f"已暂停于 {done} / {total} · 「继续演奏」或「重置」")
         if self._focus_lost and not self._mini_mode:
@@ -577,6 +680,7 @@ class PlayerTab(QWidget):
         self._clear_pause()
         self.play_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.preview_btn.setEnabled(self._score_id is not None)
         summary = getattr(self._player, "last_summary", None)
         if summary is not None:
             self.progress_state.setText(summary.format())

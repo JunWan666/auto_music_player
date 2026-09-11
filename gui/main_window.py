@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
 
         self.upload_tab.saved.connect(self.library_tab.refresh)
         self.upload_tab.saved.connect(self.player_tab.refresh)
+        self.upload_tab.settings_requested.connect(lambda: self.nav.setCurrentRow(3))
         self.library_tab.go_play.connect(self._go_play)
         self.settings_tab.providers_saved.connect(self._on_providers_saved)
 
@@ -239,6 +240,8 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._player.shutdown()
+        self.upload_tab.stop_preview()
+        self.player_tab.stop_preview()
 
     def _build_ui(self):
         root = QWidget()
@@ -364,9 +367,10 @@ class MainWindow(QMainWindow):
         from core.recognizer import get_recognizer_from_provider
 
         provider = self._settings_store.get_active()
-        self.upload_tab.set_recognizer(get_recognizer_from_provider(provider))
+        recognizer = get_recognizer_from_provider(provider)
+        self.upload_tab.set_recognizer(recognizer)
         self.set_status(
-            f"识别模型: {provider['name']} · {provider['model']}" if provider else "识别模型: 内置样例(stub)"
+            f"识别模型: {provider['name']} · {provider['model']}" if recognizer else "识别模型: 未配置"
         )
 
     # ---------- 边缘拉伸 ----------

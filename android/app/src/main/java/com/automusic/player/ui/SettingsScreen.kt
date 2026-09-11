@@ -7,22 +7,27 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,6 +49,7 @@ import com.automusic.player.ui.theme.Bg
 import com.automusic.player.ui.theme.Brand
 import com.automusic.player.ui.theme.Ink2
 import com.automusic.player.ui.theme.Ink3
+import com.automusic.player.ui.theme.Line
 import com.automusic.player.ui.theme.StateError
 import com.automusic.player.ui.theme.StateSuccess
 import kotlinx.coroutines.launch
@@ -68,69 +74,97 @@ fun SettingsScreen(container: AppContainer) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("模型设置", style = MaterialTheme.typography.titleLarge)
-
-        Card(colors = CardDefaults.cardColors(containerColor = com.automusic.player.ui.theme.Surface1)) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "配置支持图片输入的多模态模型(通义千问VL / GLM-4V / Kimi / OpenAI 等 OpenAI 兼容接口)。",
-                    color = Ink2,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Button(
-                    onClick = { creating = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = Bg),
-                ) { Text("添加供应商") }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("模型设置", style = MaterialTheme.typography.titleLarge)
+                Text("管理乐谱识别使用的多模态模型", color = Ink2, style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                onClick = { creating = true },
+                colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = Bg),
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("添加")
             }
         }
 
         for (p in providers) {
-            Card(colors = CardDefaults.cardColors(containerColor = com.automusic.player.ui.theme.Surface1)) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            val active = p.name == activeName
+            Card(
+                colors = CardDefaults.cardColors(containerColor = com.automusic.player.ui.theme.Surface1),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.name, style = MaterialTheme.typography.titleMedium)
-                            if (p.name == activeName) {
-                                Spacer(Modifier.padding(start = 6.dp))
-                                Text("激活中", color = Brand, style = MaterialTheme.typography.labelSmall)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(p.name, style = MaterialTheme.typography.titleMedium)
+                                if (active) {
+                                    Spacer(Modifier.size(8.dp))
+                                    Surface(color = StateSuccess.copy(alpha = 0.12f), shape = RoundedCornerShape(5.dp)) {
+                                        Text(
+                                            "当前使用",
+                                            color = StateSuccess,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                }
                             }
+                            Text(p.model, color = Brand, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                            Text(p.baseUrl, color = Ink3, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                         }
-                        Text(
-                            "${p.model} · ${p.baseUrl}",
-                            color = Ink2,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                        )
+                        IconButton(onClick = { editing = p }) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "编辑", tint = Ink2)
+                        }
+                        IconButton(onClick = { deleting = p }) {
+                            Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = StateError)
+                        }
                     }
-                    OutlinedButton(onClick = {
-                        notice = null
-                        scope.launch {
-                            try {
-                                val r = ScoreRecognizer(p.baseUrl, p.apiKey, p.model)
-                                val reply = r.recognizeDocument("1 2 3")
-                                notice = "连接成功,模型返回:${reply.take(24)}"
-                                noticeOk = true
-                            } catch (e: Exception) {
-                                notice = "连接失败:${e.message}"
-                                noticeOk = false
+                    HorizontalDivider(color = Line)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                            notice = null
+                            scope.launch {
+                                try {
+                                    val r = ScoreRecognizer(p.baseUrl, p.apiKey, p.model)
+                                    notice = "连接成功 · ${r.testConnection()}"
+                                    noticeOk = true
+                                } catch (e: Exception) {
+                                    notice = "连接失败：${e.message}"
+                                    noticeOk = false
+                                }
                             }
+                            },
+                        ) { Text("测试连接") }
+                        if (active) {
+                            Button(
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.size(6.dp))
+                                Text("当前模型")
+                            }
+                        } else {
+                            Button(
+                                onClick = { container.appScope.launch { container.settings.setActive(p.name) } },
+                                colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = Bg),
+                                modifier = Modifier.weight(1f),
+                            ) { Text("使用此模型") }
                         }
-                    }) { Text("测试") }
-                    IconButton(onClick = {
-                        container.appScope.launch { container.settings.setActive(p.name) }
-                    }) {
-                        Icon(Icons.Outlined.Star, contentDescription = "设为激活", tint = Brand)
-                    }
-                    IconButton(onClick = { editing = p }) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "编辑", tint = Ink2)
-                    }
-                    IconButton(onClick = { deleting = p }) {
-                        Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = StateError)
                     }
                 }
             }
@@ -140,7 +174,7 @@ fun SettingsScreen(container: AppContainer) {
             Text(notice!!, color = if (noticeOk) StateSuccess else StateError, style = MaterialTheme.typography.bodySmall)
         }
         Text(
-            "未配置供应商时,识别页将使用内置样例跑通流程;Key 仅保存在本机。",
+            "API Key 保存在本机应用数据中。测试渠道额度有限，可随时编辑或替换。",
             color = Ink3,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -175,7 +209,9 @@ fun SettingsScreen(container: AppContainer) {
                 TextButton(onClick = {
                     if (name.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank()) {
                         val p = Provider(name.trim(), baseUrl.trim(), apiKey.trim(), model.trim())
-                        scope.launch { container.settings.save(p) }
+                        val previousName = editing?.name
+                        val isNew = editing == null
+                        scope.launch { container.settings.save(p, previousName = previousName, makeActive = isNew) }
                         creating = false
                         editing = null
                     }

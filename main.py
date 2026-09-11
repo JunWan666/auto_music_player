@@ -18,7 +18,7 @@ from core.keymap import KeyMap
 from core.play_logger import PlayLogger
 from core.player import Player
 from core.profile import ensure_profiles, load_profiles, resolve_profile
-from core.recognizer import StubRecognizer, get_recognizer_from_provider
+from core.recognizer import get_recognizer_from_provider
 from core.settings_store import SettingsStore
 from gui.main_window import MainWindow
 from gui.theme import APP_QSS
@@ -86,7 +86,8 @@ def main():
     profile = resolve_profile(profiles, app_cfg.get("active_profile"))
     settings_store = SettingsStore(os.path.join(data_dir, "settings.json"))
     provider = settings_store.get_active()
-    recognizer = get_recognizer_from_provider(provider) if provider else StubRecognizer()
+    # 未配置真实模型时保持为空，由上传页引导用户配置或复制外部识别提示词。
+    recognizer = get_recognizer_from_provider(provider)
     # 修饰键与音键的间隔:配置缺失时回落到驱动默认值
     driver = KeyboardDriver(
         settle_ms=float(player_cfg.get("modifier_settle_ms", KeyboardDriver.DEFAULT_SETTLE_MS)),

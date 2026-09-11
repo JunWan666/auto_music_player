@@ -13,8 +13,8 @@ android {
         applicationId = "com.automusic.player"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.1.3"
     }
 
     buildTypes {
@@ -62,6 +62,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    testImplementation("junit:junit:4.13.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -59,12 +59,15 @@ class PlayerEngine(private val scope: kotlinx.coroutines.CoroutineScope) {
         job = scope.launch {
             val beatMs = 60000.0 / bpm.coerceAtLeast(1)
             val total = notes.size
+            val safeStartIndex = startIndex.coerceIn(0, total)
             lastTotal = total
+            lastDone = safeStartIndex
+            _state.value = State.Playing(lastDone, total)
             var complete = true
             var errorMsg: String? = null
             try {
                 var nextStart = SystemClock.uptimeMillis()
-                for (idx in startIndex.coerceIn(0, total) until total) {
+                for (idx in safeStartIndex until total) {
                     val note = notes[idx]
                     val durMs = note.dur * beatMs
                     delayUntil(nextStart)

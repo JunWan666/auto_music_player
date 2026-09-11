@@ -24,7 +24,7 @@ class AppContainer(context: Context) {
     val layouts = LayoutStore(context)
     val player = PlayerEngine(appScope)
 
-    /** 按当前激活供应商创建识别器;无配置返回 null(用内置样例)。 */
+    /** 按当前激活供应商创建识别器;无配置返回 null，由识别页引导。 */
     suspend fun createRecognizer() = RecognizerFactory.create(settings.getActiveProvider())
 
     /** 播放页 -> 库页联动的当前选中乐谱。 */

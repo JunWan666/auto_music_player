@@ -38,6 +38,25 @@ class ScoreRecognizer(
         chat("${Prompt.JIANPU_PROMPT}\n\n以下是文档提取出的乐谱内容:\n$text", null, null)
     }
 
+    /** 仅查询模型列表验证地址与密钥，不消耗生成额度。 */
+    suspend fun testConnection(): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("${apiBase.trimEnd('/')}/models")
+            .header("Authorization", "Bearer $apiKey")
+            .get()
+            .build()
+        httpClient().newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val detail = response.body?.string().orEmpty().take(200)
+                throw RuntimeException("接口返回错误(HTTP ${response.code}): $detail")
+            }
+            val body = response.body?.string().orEmpty()
+            runCatching { JSONObject(body) }
+                .getOrElse { throw RuntimeException("模型列表响应不是 JSON，请检查 Base URL 是否包含 /v1") }
+            "HTTP ${response.code}"
+        }
+    }
+
     private fun chat(textPrompt: String, image: ByteArray?, mime: String?): String {
         val content = JSONArray()
             .put(JSONObject().put("type", "text").put("text", textPrompt))
@@ -61,10 +80,7 @@ class ScoreRecognizer(
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val client = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(readTimeoutS, TimeUnit.SECONDS)
-            .build()
+        val client = httpClient()
 
         client.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) {
@@ -95,6 +111,11 @@ class ScoreRecognizer(
             return text
         }
     }
+
+    private fun httpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(readTimeoutS, TimeUnit.SECONDS)
+        .build()
 
     private fun compressImage(context: Context, uri: Uri): Pair<ByteArray, String> {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -139,7 +160,7 @@ class ScoreRecognizer(
 }
 
 object RecognizerFactory {
-    /** 按激活供应商创建识别器;无有效配置时返回 null(调用方回退内置样例)。 */
+    /** 按激活供应商创建识别器;无有效配置时返回 null，由界面明确引导。 */
     fun create(provider: Provider?): ScoreRecognizer? =
         provider
             ?.takeIf { it.baseUrl.isNotBlank() && it.apiKey.isNotBlank() && it.model.isNotBlank() }

@@ -5,8 +5,17 @@ import json
 import os
 import uuid
 
-# 不预置任何供应商,由用户在设置页自行添加
-DEFAULT_PROVIDERS = []
+# 测试阶段的首次启动配置。仅在本地没有任何供应商时写入，已有配置不会被覆盖。
+DEFAULT_PROVIDERS = [
+    {
+        "id": "test-774966",
+        "name": "774966 测试渠道",
+        "base_url": "https://api.774966.xyz/v1",
+        "api_key": "sk-zAbqTwB7SUsdQ6mFT0lImnWf98Z5QU6255Qr73WxJpBxcFCG",
+        "model": "gpt-6-astra",
+        "active": True,
+    }
+]
 
 
 class SettingsStore:
@@ -21,7 +30,13 @@ class SettingsStore:
             try:
                 with open(self.path, encoding="utf-8") as f:
                     data = json.load(f)
-                if isinstance(data, list):
+                if isinstance(data, list) and data:
+                    for provider in data:
+                        if (
+                            provider.get("id") == "test-774966"
+                            and provider.get("model") == "gpt-5.6-sol"
+                        ):
+                            provider["model"] = "gpt-6-astra"
                     return data
             except Exception:
                 pass
@@ -67,13 +82,15 @@ class SettingsStore:
         return changed
 
     def add_provider(self, name="新供应商", base_url="", api_key="", model=""):
+        for item in self._providers:
+            item["active"] = False
         p = {
             "id": uuid.uuid4().hex[:8],
             "name": name,
             "base_url": base_url,
             "api_key": api_key,
             "model": model,
-            "active": False,
+            "active": True,
         }
         self._providers.append(p)
         self.save()

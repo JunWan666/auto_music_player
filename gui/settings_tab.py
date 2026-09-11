@@ -128,7 +128,7 @@ class SettingsTab(QWidget):
         self.delete_btn = QPushButton("删除供应商")
         self.delete_btn.setObjectName("BtnDanger")
         self.delete_btn.clicked.connect(self._delete_provider)
-        self.activate_btn = QPushButton("设为激活")
+        self.activate_btn = QPushButton("使用此模型")
         self.activate_btn.setObjectName("BtnSecondary")
         self.activate_btn.clicked.connect(self._activate)
         self.save_btn = QPushButton("保存配置")
@@ -170,23 +170,29 @@ class SettingsTab(QWidget):
         if active and active.get("api_key"):
             self.provider_status.setText(f"识别模型: {active['name']} · {active['model']}")
         elif active:
-            self.provider_status.setText(f"已选 {active['name']} · {active['model']}(未填 API Key,使用内置样例)")
+            self.provider_status.setText(f"已选 {active['name']} · {active['model']}（API Key 未填写）")
         else:
-            self.provider_status.setText("识别模型: 内置样例(stub)")
+            self.provider_status.setText("识别模型: 未配置")
         self._reload_list()
 
     def _reload_list(self):
+        selected_id = self._current_id
         self.provider_list.blockSignals(True)
         self.provider_list.clear()
         for p in self._store.get_providers():
-            item = QListWidgetItem(f"{p['name']}  {'● 已激活' if p.get('active') else ''}")
+            item = QListWidgetItem(f"{p['name']}  {'● 当前使用' if p.get('active') else ''}")
             item.setData(Qt.ItemDataRole.UserRole, p["id"])
             if p.get("active"):
                 item.setForeground(Qt.GlobalColor.white)
             self.provider_list.addItem(item)
         self.provider_list.blockSignals(False)
         if self.provider_list.count() > 0:
-            self.provider_list.setCurrentRow(0)
+            target_row = 0
+            for row in range(self.provider_list.count()):
+                if self.provider_list.item(row).data(Qt.ItemDataRole.UserRole) == selected_id:
+                    target_row = row
+                    break
+            self.provider_list.setCurrentRow(target_row)
         else:
             self._current_id = None
             self.name_edit.clear()
@@ -216,17 +222,21 @@ class SettingsTab(QWidget):
         self.key_edit.setText(p.get("api_key", ""))
         self.model_edit.setText(p.get("model", ""))
         if p.get("active"):
-            self.active_tag.setText("✓ 当前已激活")
+            self.active_tag.setText("✓ 当前使用")
             self.active_tag.setStyleSheet(
                 f"font-size: 12px; color: {STATE_SUCCESS}; padding: 0 10px; "
                 f"background: rgba(74, 222, 128, 0.1); border-radius: 999px;"
             )
+            self.activate_btn.setText("当前模型")
+            self.activate_btn.setEnabled(False)
         else:
-            self.active_tag.setText("未激活")
+            self.active_tag.setText("未使用")
             self.active_tag.setStyleSheet(
                 f"font-size: 12px; color: {INK_2}; padding: 0 10px; "
                 f"background: rgba(148, 148, 162, 0.1); border-radius: 999px;"
             )
+            self.activate_btn.setText("使用此模型")
+            self.activate_btn.setEnabled(True)
 
     # ---------- 操作 ----------
 
@@ -258,6 +268,8 @@ class SettingsTab(QWidget):
 
     def _add_provider(self):
         pid = self._store.add_provider()
+        self._current_id = pid
+        self.providers_saved.emit()
         self.refresh_provider_status()
         for i in range(self.provider_list.count()):
             if self.provider_list.item(i).data(Qt.ItemDataRole.UserRole) == pid:

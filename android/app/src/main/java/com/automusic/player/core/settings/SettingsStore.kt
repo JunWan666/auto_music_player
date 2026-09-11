@@ -20,6 +20,13 @@ data class Provider(
     val model: String,
 )
 
+private val DEFAULT_PROVIDER = Provider(
+    name = "774966 测试渠道",
+    baseUrl = "https://api.774966.xyz/v1",
+    apiKey = "sk-zAbqTwB7SUsdQ6mFT0lImnWf98Z5QU6255Qr73WxJpBxcFCG",
+    model = "gpt-6-astra",
+)
+
 /** 设置存储:供应商列表 + 激活项,JSON 持久化(协议与桌面版一致)。 */
 class SettingsStore(private val context: Context) {
 
@@ -27,31 +34,35 @@ class SettingsStore(private val context: Context) {
     private val KEY_ACTIVE = stringPreferencesKey("active_provider")
 
     val providersFlow: Flow<List<Provider>> = context.dataStore.data.map { prefs ->
-        decode(prefs[KEY_PROVIDERS] ?: "[]")
+        providers(prefs[KEY_PROVIDERS])
     }
 
     val activeNameFlow: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_ACTIVE] ?: ""
+        prefs[KEY_ACTIVE] ?: if (prefs[KEY_PROVIDERS] == null) DEFAULT_PROVIDER.name else ""
     }
 
     suspend fun getActiveProvider(): Provider? {
         val prefs = context.dataStore.data.first()
-        val active = prefs[KEY_ACTIVE] ?: return null
-        return decode(prefs[KEY_PROVIDERS] ?: "[]").firstOrNull { it.name == active }
+        val active = prefs[KEY_ACTIVE] ?: if (prefs[KEY_PROVIDERS] == null) DEFAULT_PROVIDER.name else return null
+        return providers(prefs[KEY_PROVIDERS]).firstOrNull { it.name == active }
     }
 
-    suspend fun save(provider: Provider) {
+    suspend fun save(provider: Provider, previousName: String? = null, makeActive: Boolean = false) {
         context.dataStore.edit { prefs ->
-            val list = decode(prefs[KEY_PROVIDERS] ?: "[]").toMutableList()
-            val idx = list.indexOfFirst { it.name == provider.name }
+            val currentActive = prefs[KEY_ACTIVE]
+                ?: if (prefs[KEY_PROVIDERS] == null) DEFAULT_PROVIDER.name else ""
+            val list = providers(prefs[KEY_PROVIDERS]).toMutableList()
+            val oldName = previousName ?: provider.name
+            val idx = list.indexOfFirst { it.name == oldName }
             if (idx >= 0) list[idx] = provider else list.add(provider)
             prefs[KEY_PROVIDERS] = encode(list)
+            if (makeActive || currentActive == oldName) prefs[KEY_ACTIVE] = provider.name
         }
     }
 
     suspend fun delete(name: String) {
         context.dataStore.edit { prefs ->
-            val list = decode(prefs[KEY_PROVIDERS] ?: "[]").filter { it.name != name }
+            val list = providers(prefs[KEY_PROVIDERS]).filter { it.name != name }
             prefs[KEY_PROVIDERS] = encode(list)
             if (prefs[KEY_ACTIVE] == name) prefs[KEY_ACTIVE] = ""
         }
@@ -75,6 +86,23 @@ class SettingsStore(private val context: Context) {
         return arr.toString()
     }
 
+    private fun providers(stored: String?): List<Provider> =
+        if (stored == null) {
+            listOf(DEFAULT_PROVIDER)
+        } else {
+            decode(stored).map { provider ->
+                if (
+                    provider.name == DEFAULT_PROVIDER.name &&
+                    provider.baseUrl.trimEnd('/') == DEFAULT_PROVIDER.baseUrl &&
+                    provider.model == LEGACY_DEFAULT_MODEL
+                ) {
+                    provider.copy(model = DEFAULT_PROVIDER.model)
+                } else {
+                    provider
+                }
+            }
+        }
+
     private fun decode(json: String): List<Provider> = try {
         val arr = JSONArray(json)
         buildList {
@@ -92,5 +120,9 @@ class SettingsStore(private val context: Context) {
         }
     } catch (e: Exception) {
         emptyList()
+    }
+
+    private companion object {
+        const val LEGACY_DEFAULT_MODEL = "gpt-5.6-sol"
     }
 }

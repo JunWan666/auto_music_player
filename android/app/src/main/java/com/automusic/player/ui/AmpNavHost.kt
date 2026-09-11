@@ -66,7 +66,7 @@ fun AmpNavHost(container: AppContainer) {
     ) { padding ->
         Box(Modifier.padding(padding)) {
             when (tab) {
-                Tab.UPLOAD -> UploadScreen(container)
+                Tab.UPLOAD -> UploadScreen(container, onOpenSettings = { tab = Tab.SETTINGS })
                 Tab.LIBRARY -> LibraryScreen(container, onGoPlay = { tab = Tab.PLAY })
                 Tab.PLAY -> PlayScreen(container)
                 Tab.CALIB -> CalibScreen(container)

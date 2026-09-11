@@ -262,23 +262,25 @@ fun PlayScreen(container: AppContainer) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            Column(
-                Modifier.fillMaxWidth().background(Surface1).padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text("演奏", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    selectedScore?.name ?: "尚未选择乐谱",
-                    color = Ink2,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                )
-            }
+            PageHeader(
+                title = "演奏控制台",
+                subtitle = selectedScore?.name ?: "选择乐谱、布局并开启触摸服务",
+                icon = Icons.Outlined.PlayArrow,
+                badge = "${bpm.toInt()} BPM",
+            )
 
             Column(
                 Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                WorkflowRail(
+                    steps = listOf("选谱", "布局", "演奏"),
+                    currentStep = when {
+                        selectedScore == null || previewNotes.isEmpty() -> 0
+                        activeLayout == null || !a11yReady -> 1
+                        else -> 2
+                    },
+                )
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = (if (a11yReady) StateSuccess else StateError).copy(alpha = 0.1f),
@@ -307,14 +309,33 @@ fun PlayScreen(container: AppContainer) {
                     }
                 }
 
+                SectionHeading("01", "演奏状态", "先确认乐谱、布局与触摸服务")
+                PlayControlPanel(
+                    playState = playState,
+                    readyToPlay = readyToPlay,
+                    scoreReady = selectedScore != null && previewNotes.isNotEmpty(),
+                    layoutReady = activeLayout != null,
+                    touchReady = a11yReady,
+                    countdownActive = countdown != null,
+                    onStart = { startPlay() },
+                    onPause = {
+                        player.stop()
+                        countdown = null
+                        PlaybackService.stop(context)
+                    },
+                    onReset = {
+                        player.reset()
+                        PlaybackService.stop(context)
+                    },
+                )
+
+                SectionHeading("02", "曲谱与演奏参数", "试听无误后再发送到游戏")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface1),
                     shape = RoundedCornerShape(8.dp),
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SectionTitle("演奏内容", "曲谱与键位布局")
-
                         ExposedDropdownMenuBox(
                             expanded = scoreMenuOpen,
                             onExpandedChange = { if (inputEnabled) scoreMenuOpen = it },
@@ -550,123 +571,6 @@ fun PlayScreen(container: AppContainer) {
                     }
                 }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Surface1),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        val finished = playState as? PlayerEngine.State.Finished
-                        val stateColor = when {
-                            playing -> Brand
-                            pausedState != null -> StateWarning
-                            finished?.error != null -> StateError
-                            readyToPlay -> StateSuccess
-                            else -> Ink3
-                        }
-                        val stateTitle = when {
-                            playing -> "正在演奏"
-                            pausedState != null -> "演奏已暂停"
-                            finished?.error != null -> "演奏失败"
-                            finished?.complete == true -> "演奏完成"
-                            readyToPlay -> "可以开始演奏"
-                            else -> "演奏条件未就绪"
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(9.dp).clip(CircleShape).background(stateColor))
-                            Text(
-                                stateTitle,
-                                color = stateColor,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(start = 9.dp).weight(1f),
-                            )
-                            if (playing) {
-                                val state = playState as PlayerEngine.State.Playing
-                                Text("${state.done}/${state.total}", color = Ink2, style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            ReadyPill("乐谱", selectedScore != null && previewNotes.isNotEmpty(), Modifier.weight(1f))
-                            ReadyPill("布局", activeLayout != null, Modifier.weight(1f))
-                            ReadyPill("触摸", a11yReady, Modifier.weight(1f))
-                        }
-
-                        val progressDone = when (val state = playState) {
-                            is PlayerEngine.State.Playing -> state.done
-                            is PlayerEngine.State.Paused -> state.done
-                            else -> 0
-                        }
-                        val progressTotal = when (val state = playState) {
-                            is PlayerEngine.State.Playing -> state.total
-                            is PlayerEngine.State.Paused -> state.total
-                            else -> 0
-                        }
-                        if (progressTotal > 0) {
-                            LinearProgressIndicator(
-                                progress = { progressDone.toFloat() / progressTotal },
-                                color = if (pausedState != null) StateWarning else Brand,
-                                trackColor = Line,
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
-                            )
-                            Text(
-                                if (pausedState != null) "已暂停在第 $progressDone 个音符"
-                                else "正在演奏第 ${(progressDone + 1).coerceAtMost(progressTotal)} 个音符",
-                                color = Ink2,
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-
-                        Button(
-                            enabled = readyToPlay && !playing && countdown == null,
-                            onClick = { startPlay() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = Bg),
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                        ) {
-                            Icon(
-                                if (pausedState != null) Icons.Outlined.PlayArrow else Icons.Outlined.MusicNote,
-                                null,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Spacer(Modifier.size(7.dp))
-                            Text(if (pausedState != null) "继续演奏" else "开始演奏", fontWeight = FontWeight.SemiBold)
-                        }
-
-                        if (playing) {
-                            OutlinedButton(
-                                onClick = {
-                                    player.stop()
-                                    countdown = null
-                                    PlaybackService.stop(context)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Icon(Icons.Outlined.Pause, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.size(6.dp))
-                                Text("暂停并保留进度")
-                            }
-                        } else if (pausedState != null) {
-                            OutlinedButton(
-                                onClick = {
-                                    player.reset()
-                                    PlaybackService.stop(context)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Icon(Icons.Outlined.Replay, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.size(6.dp))
-                                Text("放弃进度，从头开始")
-                            }
-                        }
-
-                        if (finished?.error != null) {
-                            Text(finished.error, color = StateError, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-
                 notice?.let { message ->
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -700,6 +604,120 @@ fun PlayScreen(container: AppContainer) {
                     Text(countdownMessage, color = Ink2)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PlayControlPanel(
+    playState: PlayerEngine.State,
+    readyToPlay: Boolean,
+    scoreReady: Boolean,
+    layoutReady: Boolean,
+    touchReady: Boolean,
+    countdownActive: Boolean,
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onReset: () -> Unit,
+) {
+    val playing = playState is PlayerEngine.State.Playing
+    val paused = playState as? PlayerEngine.State.Paused
+    val finished = playState as? PlayerEngine.State.Finished
+    val stateColor = when {
+        playing -> Brand
+        paused != null -> StateWarning
+        finished?.error != null -> StateError
+        readyToPlay -> StateSuccess
+        else -> Ink3
+    }
+    val stateTitle = when {
+        playing -> "正在向游戏发送音符"
+        paused != null -> "演奏已暂停"
+        finished?.error != null -> "演奏失败"
+        finished?.complete == true -> "本次演奏完成"
+        readyToPlay -> "已就绪，可以开始"
+        else -> "还缺少演奏条件"
+    }
+    val progressDone = when (playState) {
+        is PlayerEngine.State.Playing -> playState.done
+        is PlayerEngine.State.Paused -> playState.done
+        else -> 0
+    }
+    val progressTotal = when (playState) {
+        is PlayerEngine.State.Playing -> playState.total
+        is PlayerEngine.State.Paused -> playState.total
+        else -> 0
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Surface2,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, stateColor.copy(alpha = 0.5f)),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = stateColor.copy(alpha = 0.15f), shape = RoundedCornerShape(7.dp)) {
+                    Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (playing) Icons.Outlined.MusicNote else Icons.Outlined.PlayArrow,
+                            contentDescription = null,
+                            tint = stateColor,
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f).padding(start = 11.dp)) {
+                    Text(stateTitle, color = stateColor, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (progressTotal > 0) "$progressDone / $progressTotal 个音符"
+                        else "倒计时后自动切回游戏演奏",
+                        color = Ink2,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ReadyPill("乐谱", scoreReady, Modifier.weight(1f))
+                ReadyPill("布局", layoutReady, Modifier.weight(1f))
+                ReadyPill("触摸", touchReady, Modifier.weight(1f))
+            }
+
+            if (progressTotal > 0) {
+                LinearProgressIndicator(
+                    progress = { progressDone.toFloat() / progressTotal },
+                    color = if (paused != null) StateWarning else Brand,
+                    trackColor = Line,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
+                )
+            }
+
+            Button(
+                enabled = readyToPlay && !playing && !countdownActive,
+                onClick = onStart,
+                colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = Bg),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
+                Icon(Icons.Outlined.PlayArrow, null, modifier = Modifier.size(21.dp))
+                Spacer(Modifier.size(7.dp))
+                Text(if (paused != null) "继续演奏" else "开始演奏", fontWeight = FontWeight.SemiBold)
+            }
+
+            if (playing) {
+                OutlinedButton(onClick = onPause, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.Pause, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("暂停并保留进度")
+                }
+            } else if (paused != null) {
+                OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.Replay, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("放弃进度，从头开始")
+                }
+            }
+
+            finished?.error?.let { Text(it, color = StateError, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

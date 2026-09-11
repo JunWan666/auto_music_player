@@ -105,20 +105,18 @@ fun LibraryScreen(container: AppContainer, onGoPlay: () -> Unit) {
         )
     } else {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxSize(),
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("乐谱库", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("${scores.size} 首已保存乐谱", color = Ink2, style = MaterialTheme.typography.bodySmall)
-                }
-                Icon(Icons.Outlined.LibraryMusic, contentDescription = null, tint = Brand, modifier = Modifier.size(28.dp))
-            }
+            PageHeader(
+                title = "乐谱库",
+                subtitle = "查看、校对和试听已保存的曲谱",
+                icon = Icons.Outlined.LibraryMusic,
+                badge = "${scores.size} 首",
+            )
 
             if (scores.isEmpty()) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
                     color = Surface1,
                     shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, Line),
@@ -134,7 +132,10 @@ fun LibraryScreen(container: AppContainer, onGoPlay: () -> Unit) {
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     items(scores, key = { it.id }) { score ->
                         val noteCount = remember(score.notesJson) {
                             runCatching { NoteCodec.decode(score.notesJson).size }.getOrDefault(0)

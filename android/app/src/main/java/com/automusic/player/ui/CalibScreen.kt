@@ -181,22 +181,29 @@ fun CalibScreen(container: AppContainer) {
 
     Box(Modifier.fillMaxSize().background(Bg)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            Column(
-                Modifier.fillMaxWidth().background(Surface1).padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text("琴键标定", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    editingLayout?.let { "${it.name} · $completeCount/21 键" } ?: "选择或新建琴键布局",
-                    color = Ink2,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+            PageHeader(
+                title = "琴键标定",
+                subtitle = editingLayout?.let { "${it.name} · 已记录 $completeCount/21 个键位" }
+                    ?: "选择或新建琴键布局",
+                icon = Icons.Outlined.TouchApp,
+                badge = "$completeCount / 21",
+            )
 
             Column(
                 Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                WorkflowRail(
+                    steps = listOf("选择布局", "导入截图", "标定键位"),
+                    currentStep = when {
+                        completeCount == notes.size -> 2
+                        editingLayout == null -> 0
+                        bitmap == null -> 1
+                        else -> 2
+                    },
+                )
+
+                SectionHeading("01", "布局方案", "选择、导入或新建一套设备布局")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface1),
@@ -205,8 +212,8 @@ fun CalibScreen(container: AppContainer) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("布局文件", color = Ink, fontWeight = FontWeight.SemiBold)
-                                Text("${layoutState.layouts.size} 个本地布局", color = Ink3, style = MaterialTheme.typography.bodySmall)
+                                Text(editingLayout?.name ?: "尚未选择布局", color = Ink, fontWeight = FontWeight.SemiBold)
+                                Text("${layoutState.layouts.size} 个本地方案", color = Ink3, style = MaterialTheme.typography.bodySmall)
                             }
                             IconButton(onClick = { showNewDialog = true }) {
                                 Icon(Icons.Outlined.Add, contentDescription = "新建布局", tint = Brand)
@@ -253,6 +260,7 @@ fun CalibScreen(container: AppContainer) {
                     }
                 }
 
+                SectionHeading("02", "截图与键位", "按目标顺序点击琴键中心，支持四角快速推算")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Surface1),

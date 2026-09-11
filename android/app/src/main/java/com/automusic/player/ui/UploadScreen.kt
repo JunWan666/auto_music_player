@@ -209,21 +209,25 @@ fun UploadScreen(container: AppContainer, onOpenSettings: () -> Unit) {
             .background(Bg)
             .verticalScroll(rememberScrollState()),
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(Surface1)
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text("识别乐谱", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text("上传谱面，校对音符与节奏后试听保存", color = Ink2, style = MaterialTheme.typography.bodySmall)
-        }
+        PageHeader(
+            title = "识别乐谱",
+            subtitle = "上传谱面，校对音符与节奏后试听保存",
+            icon = Icons.Outlined.UploadFile,
+            badge = "AI 识谱",
+        )
 
         Column(
             Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            WorkflowRail(
+                steps = listOf("上传", "校对", "试听保存"),
+                currentStep = when {
+                    previewConfirmed -> 2
+                    jianpuValue.text.isNotBlank() -> 1
+                    else -> 0
+                },
+            )
             if (preview == null) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,14 +71,23 @@ fun SettingsScreen(container: AppContainer) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .verticalScroll(rememberScrollState()),
     ) {
+        PageHeader(
+            title = "模型设置",
+            subtitle = "管理乐谱识别使用的多模态模型",
+            icon = Icons.Outlined.Settings,
+            badge = "UI2 · 1.2.1",
+        )
+
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("模型设置", style = MaterialTheme.typography.titleLarge)
-                Text("管理乐谱识别使用的多模态模型", color = Ink2, style = MaterialTheme.typography.bodySmall)
+                Text("模型渠道", style = MaterialTheme.typography.titleMedium)
+                Text("${providers.size} 个配置 · ${if (activeName.isBlank()) "未启用" else "已启用 $activeName"}", color = Ink2, style = MaterialTheme.typography.bodySmall)
             }
             Button(
                 onClick = { creating = true },
@@ -149,14 +159,29 @@ fun SettingsScreen(container: AppContainer) {
                             },
                         ) { Text("测试连接") }
                         if (active) {
-                            Button(
-                                onClick = {},
-                                enabled = false,
+                            Surface(
                                 modifier = Modifier.weight(1f),
+                                color = StateSuccess.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    StateSuccess.copy(alpha = 0.45f),
+                                ),
                             ) {
-                                Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(17.dp))
-                                Spacer(Modifier.size(6.dp))
-                                Text("当前模型")
+                                Row(
+                                    Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.CheckCircle,
+                                        contentDescription = null,
+                                        tint = StateSuccess,
+                                        modifier = Modifier.size(17.dp),
+                                    )
+                                    Spacer(Modifier.size(6.dp))
+                                    Text("正在使用", color = StateSuccess)
+                                }
                             }
                         } else {
                             Button(
@@ -178,6 +203,7 @@ fun SettingsScreen(container: AppContainer) {
             color = Ink3,
             style = MaterialTheme.typography.bodySmall,
         )
+        }
     }
 
     val dialogOpen = creating || editing != null
